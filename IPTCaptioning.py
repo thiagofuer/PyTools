@@ -16,7 +16,7 @@ targetLanguageProp = 'targetlanguage'
 showLogProp = 'showLog'
 captionPromptProp = 'captionPrompt'
 maxLengthProp = 'maxLength'
-captioning_resultad_metadada = 'ImageCaptioning'
+captioning_result_metadada = 'ImageCaptioning'
 
 # Variáveis globais de estado e modelo
 enabled = False
@@ -275,7 +275,7 @@ class IPTCaptioning:
                 cache = caseData.getCaseObject('caption_cache')
                 caption = cache.get(item.getHash())
                 if caption is not None:
-                    item.setExtraAttribute(captioning_resultad_metadada, caption)
+                    item.setExtraAttribute(captioning_result_metadada, caption)
                     _log_info(f"[IPTCaptioning] Legenda recuperada do cache para {item.getName()}: {caption}...")
                     return
 
@@ -304,7 +304,7 @@ def processImage(image, item):
     try:
         caption = generateCaption(image)
         cache = caseData.getCaseObject('caption_cache')
-        item.setExtraAttribute(captioning_resultad_metadada, caption)
+        item.setExtraAttribute(captioning_result_metadada, caption)
         #se chegou até aqui é porque não tinha o cache do item. Então adicionamos a legenda ao cache
         if item.getHash() is not None:
             cache.put(item.getHash(), caption)
