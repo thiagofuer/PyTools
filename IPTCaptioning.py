@@ -15,6 +15,7 @@ configFile = 'IPTCaptioningConfig.txt'
 targetLanguageProp = 'targetlanguage'
 showLogProp = 'showLog'
 captionPromptProp = 'captionPrompt'
+maxLengthProp = 'maxLength'
 captioning_resultad_metadada = 'ImageCaptioning'
 
 # Variáveis globais de estado e modelo
@@ -29,6 +30,7 @@ max_image_size = 800
 target_language = 'pt'
 show_log_messages = True
 caption_prompt_value = ''
+max_caption_length = 70
 
 # --- Wrapper para Logger Condicional ---
 def _log_info(message):
@@ -39,7 +41,7 @@ def _log_warn(message):
     if show_log_messages:
         logger.warn(message)
 
-# --- FUNÇÃO GENÉRICA PARA LER PROPRIEDADES ---
+# --- Função para ler os valores do arquivo de propriedades IPTCaptioningConfig.txt  ---
 def _get_property_from_config_file(property_name, default_value):
     """
     Lê uma propriedade específica do arquivo de configuração.
@@ -95,15 +97,29 @@ def get_caption_prompt_config():
     """Obtém o prompt de legenda customizado do arquivo de propriedades."""
     return _get_property_from_config_file(captionPromptProp, '') # Padrão é sem prompt
 
+def get_max_caption_length_config(): # Nova função
+    default_max_len_str = "70"
+    value_str = _get_property_from_config_file(maxLengthProp, default_max_len_str)
+    try:
+        val_int = int(value_str)
+        if val_int <= 0:
+            print(f"[IPTCaptioning] WARNING: Valor para '{maxLengthProp}' deve ser positivo: '{value_str}'. Usando padrão {default_max_len_str}.")
+            return int(default_max_len_str)
+        return val_int
+    except ValueError:
+        print(f"[IPTCaptioning] WARNING: Valor inválido para '{maxLengthProp}': '{value_str}'. Usando padrão {default_max_len_str}.")
+        return int(default_max_len_str)
+
 def loadModel():
-    global processor, model, target_language, use_gpu, show_log_messages, caption_prompt_value
+    global processor, model, target_language, use_gpu, show_log_messages, caption_prompt_value, max_caption_length # Adicionado max_caption_length
 
     # Carregar configurações primeiro, pois afetam os logs subsequentes
     target_language = get_target_language_config()
-    show_log_messages = get_show_log_config() # Define show_log_messages globalmente
+    show_log_messages = get_show_log_config()
     caption_prompt_value = get_caption_prompt_config()
+    max_caption_length = get_max_caption_length_config()
 
-    _log_info(f"[IPTCaptioning] Configurações carregadas: target_language='{target_language}', show_log={show_log_messages}, caption_prompt='{caption_prompt_value}'")
+    _log_info(f"[IPTCaptioning] Configurações carregadas: target_language='{target_language}', show_log={show_log_messages}, caption_prompt='{caption_prompt_value}', max_caption_length={max_caption_length}") # Adicionado ao log
 
     model_obj = caseData.getCaseObject('blip_model')
     processor_obj = caseData.getCaseObject('blip_processor')
@@ -167,7 +183,7 @@ def loadModel():
         cache = ConcurrentHashMap()
         caseData.putCaseObject('caption_cache', cache)
 
-        # As configurações (target_language, show_log_messages, caption_prompt_value) já foram definidas no início da função.
+        # As configurações (target_language, show_log_messages, caption_prompt_value, max_caption_length) já foram definidas no início da função.
         _log_info("[IPTCaptioning] Modelo BLIP carregado com sucesso.")
         return model, processor
 
@@ -194,7 +210,7 @@ def resize_image_if_needed(img):
         _log_info(f"[IPTCaptioning] Imagem redimensionada para {new_width}x{new_height}")
     return img
 
-def loadRawImage(input_bytes): # Renomeado parâmetro para evitar conflito
+def loadRawImage(input_bytes):
     from PIL import Image as PilImage
     img = PilImage.open(io.BytesIO(input_bytes))
     img = img.convert('RGB')
@@ -260,7 +276,7 @@ class IPTCaptioning:
                 caption = cache.get(item.getHash())
                 if caption is not None:
                     item.setExtraAttribute(captioning_resultad_metadada, caption)
-                    _log_info(f"[IPTCaptioning] Legenda recuperada do cache para {item.getName()}: {caption}...") # Log truncado
+                    _log_info(f"[IPTCaptioning] Legenda recuperada do cache para {item.getName()}: {caption}...")
                     return
 
             img = None
@@ -270,7 +286,7 @@ class IPTCaptioning:
                 img_path = item.getTempFile().getAbsolutePath()
                 img = PilImage.open(img_path).convert('RGB')
                 _log_info(f"[IPTCaptioning] Imagem carregada de arquivo temporário: {img_path}")
-            elif isImage(item) and useImageThumbs and item.getExtraAttribute('hasThumb'): # Usar elif para evitar recarregar
+            elif isImage(item) and useImageThumbs and item.getExtraAttribute('hasThumb'):
                 input_bytes = convertJavaByteArray(item.getThumb())
                 img = loadRawImage(input_bytes)
                 _log_info(f"[IPTCaptioning] Imagem carregada do thumbnail para {item.getName()}")
@@ -284,9 +300,9 @@ class IPTCaptioning:
         except Exception as e:
             _log_warn(f"[IPTCaptioning] Erro ao processar imagem {item.getName() if item else 'desconhecida'}: {str(e)}\n{traceback.format_exc()}")
 
-def processImage(image, item): # Adicionado item como parâmetro
+def processImage(image, item):
     try:
-        caption = makePredictions(image) # image já é o objeto PIL.Image
+        caption = generateCaption(image)
         cache = caseData.getCaseObject('caption_cache')
         item.setExtraAttribute(captioning_resultad_metadada, caption)
         #se chegou até aqui é porque não tinha o cache do item. Então adicionamos a legenda ao cache
@@ -297,8 +313,8 @@ def processImage(image, item): # Adicionado item como parâmetro
     except Exception as e:
         _log_warn(f"[IPTCaptioning] Erro ao processar imagem {item.getName() if item else 'desconhecida'} no processImage: {str(e)}\n{traceback.format_exc()}")
 
-def makePredictions(img):
-    global caption_prompt_value # Acessa o prompt global
+def generateCaption(img):
+    global caption_prompt_value, max_caption_length
     try:
         # Conditional Image Captioning
         if caption_prompt_value: # Se caption_prompt_value não for nulo ou string vazia
@@ -310,7 +326,7 @@ def makePredictions(img):
         if use_gpu:
             inputs = {k: v.to('cuda') for k, v in inputs.items()}
 
-        out = model.generate(**inputs, max_length=70)
+        out = model.generate(**inputs, max_length=max_caption_length) # Usa a variável global
         caption_en = processor.decode(out[0], skip_special_tokens=True)
         _log_info(f"[IPTCaptioning] Legenda gerada (EN): {caption_en}...")
 
