@@ -1,0 +1,17 @@
+# Idioma alvo para a tradução das legendas (ex: pt, es, fr, de).
+# Se não definido ou vazio, o padrão é 'pt'.
+targetlanguage=pt
+
+# Controla se os logs detalhados do IPTCaptioning devem ser exibidos.
+# Valores: true ou false. Padrão: true (se a propriedade não existir ou for inválida).
+showLog=true
+
+# Prompt a ser usado para "Conditional Image Captioning".
+# Se um valor for fornecido (ex: "uma foto de", "uma imagem detalhada de"),
+# ele será usado para guiar a geração da legenda.
+# Se deixado em branco ou a propriedade for omitida, o captioning padrão será usado.
+captionPrompt=
+
+# Define o comprimento máximo da legenda gerada pelo modelo.
+# Deve ser um número inteiro positivo. Padrão: 70.
+maxLength=70
