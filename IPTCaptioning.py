@@ -13,22 +13,22 @@ import io
 enableProp = 'enableImageCaptioning'
 configFile = 'IPTCaptioningConfig.txt'
 targetLanguageProp = 'targetlanguage'
-showLogProp = 'showLog' # Nova propriedade
-captionPromptProp = 'captionPrompt' # Nova propriedade
+showLogProp = 'showLog'
+captionPromptProp = 'captionPrompt'
 captioning_resultad_metadada = 'ImageCaptioning'
 
 # Variáveis globais de estado e modelo
 enabled = False
-useImageThumbs = False # Mantido para consistência, embora não explicitamente mencionado na refatoração
+useImageThumbs = False
 processor = None
 model = None
-use_gpu = False # Será definido em loadModel
-max_image_size = 800  # Limite de tamanho da imagem para economizar memória
+use_gpu = False
+max_image_size = 800
 
 # Variáveis globais para armazenar os valores das propriedades lidas
-target_language = 'pt' # Padrão
-show_log_messages = True # Padrão, será atualizado
-caption_prompt_value = '' # Padrão, será atualizado
+target_language = 'pt'
+show_log_messages = True
+caption_prompt_value = ''
 
 # --- Wrapper para Logger Condicional ---
 def _log_info(message):
@@ -176,9 +176,6 @@ def loadModel():
         _log_warn(error_msg) # Usa o wrapper de log
         raise RuntimeError(error_msg)
 
-# A função get_target_language original foi substituída por get_target_language_config
-# e o valor é armazenado na variável global target_language.
-
 def isImage(item):
     return item.getMediaType() is not None and item.getMediaType().toString().startswith('image')
 
@@ -212,7 +209,6 @@ class IPTCaptioning:
         self.itemList = []
         self.imageList = []
         self.queued = False
-        self.processing_times = [] # Não usado atualmente, mas mantido
 
     def isEnabled(self):
         return enabled
@@ -225,23 +221,14 @@ class IPTCaptioning:
         return [EnableTaskProperty(enableProp)]
 
     def init(self, configuration):
-        global enabled, PilImage, translator # PilImage e translator precisam ser globais para as funções fora da classe
+        global enabled, PilImage, translator
 
-        # A configuração de show_log_messages é feita dentro de loadModel,
-        # mas precisamos de um valor inicial para o log de habilitação.
-        # Podemos ler showLogProp aqui uma vez para este log específico,
-        # ou aceitar que este primeiro log sempre aparecerá.
-        # Para simplicidade, vamos deixar este log inicial sempre aparecer,
-        # e os subsequentes respeitarão a configuração.
-        # Alternativamente, chamar get_show_log_config() aqui também.
-        initial_show_log = get_show_log_config() # Ler para o log de habilitação
+        initial_show_log = get_show_log_config()
         if initial_show_log:
             logger.info(f"[IPTCaptioning] Tentando habilitar com base na configuração: {configuration.getEnableTaskProperty(enableProp)}")
 
-
         enabled = configuration.getEnableTaskProperty(enableProp)
 
-        # Atualiza show_log_messages para o log de "habilitado"
         global show_log_messages
         show_log_messages = get_show_log_config()
 
@@ -253,12 +240,11 @@ class IPTCaptioning:
         from PIL import Image as PilImage
         from deep_translator import GoogleTranslator as translator
 
-        loadModel() # Isso agora também carrega target_language, show_log_messages, caption_prompt_value
+        loadModel()
 
     def finish(self):
         self.itemList.clear()
         self.imageList.clear()
-        self.processing_times.clear()
         _log_info("[IPTCaptioning] Finish")
 
     def process(self, item):
@@ -274,7 +260,7 @@ class IPTCaptioning:
                 caption = cache.get(item.getHash())
                 if caption is not None:
                     item.setExtraAttribute(captioning_resultad_metadada, caption)
-                    _log_info(f"[IPTCaptioning] Legenda recuperada do cache para {item.getName()}: {caption[:100]}...") # Log truncado
+                    _log_info(f"[IPTCaptioning] Legenda recuperada do cache para {item.getName()}: {caption}...") # Log truncado
                     return
 
             img = None
@@ -297,20 +283,17 @@ class IPTCaptioning:
             processImage(img, item) # Passa o item para logging e cache
         except Exception as e:
             _log_warn(f"[IPTCaptioning] Erro ao processar imagem {item.getName() if item else 'desconhecida'}: {str(e)}\n{traceback.format_exc()}")
-            # Não relançar a exceção aqui para não parar o processamento de outros itens,
-            # a menos que seja um comportamento desejado.
-            # raise e
 
 def processImage(image, item): # Adicionado item como parâmetro
     try:
         caption = makePredictions(image) # image já é o objeto PIL.Image
         cache = caseData.getCaseObject('caption_cache')
         item.setExtraAttribute(captioning_resultad_metadada, caption)
-        #se chegou ate aqui é porque não tinha o cache do item. Entao adicionamos a legenda ao cache
+        #se chegou até aqui é porque não tinha o cache do item. Então adicionamos a legenda ao cache
         if item.getHash() is not None:
             cache.put(item.getHash(), caption)
 
-        _log_info(f"[IPTCaptioning] Legenda definida para {item.getName()}: {caption[:100]}...") # Log truncado
+        _log_info(f"[IPTCaptioning] Legenda definida para {item.getName()}: {caption}...")
     except Exception as e:
         _log_warn(f"[IPTCaptioning] Erro ao processar imagem {item.getName() if item else 'desconhecida'} no processImage: {str(e)}\n{traceback.format_exc()}")
 
@@ -322,22 +305,22 @@ def makePredictions(img):
             _log_info(f"[IPTCaptioning] Usando prompt condicional: '{caption_prompt_value}'")
             inputs = processor(images=img, text=caption_prompt_value, return_tensors="pt")
         else:
-            inputs = processor(images=img, return_tensors="pt") # Mantido images= para clareza
+            inputs = processor(images=img, return_tensors="pt")
 
         if use_gpu:
             inputs = {k: v.to('cuda') for k, v in inputs.items()}
 
-        out = model.generate(**inputs, max_length=70) # Aumentado max_length para prompts
+        out = model.generate(**inputs, max_length=70)
         caption_en = processor.decode(out[0], skip_special_tokens=True)
-        _log_info(f"[IPTCaptioning] Legenda gerada (EN): {caption_en[:100]}...")
+        _log_info(f"[IPTCaptioning] Legenda gerada (EN): {caption_en}...")
 
         if target_language and target_language.lower() != 'en':
             try:
                 translated_caption = translator(source='auto', target=target_language).translate(caption_en)
-                _log_info(f"[IPTCaptioning] Legenda traduzida para '{target_language}': {translated_caption[:100]}...")
+                _log_info(f"[IPTCaptioning] Legenda traduzida para '{target_language}': {translated_caption}...")
                 caption = translated_caption
             except Exception as e_translate:
-                _log_warn(f"[IPTCaptioning] Erro na tradução de '{caption_en[:50]}...' para '{target_language}', usando legenda em inglês: {str(e_translate)}")
+                _log_warn(f"[IPTCaptioning] Erro na tradução de '{caption_en}...' para '{target_language}', usando legenda em inglês: {str(e_translate)}")
                 caption = caption_en
         else:
             caption = caption_en
