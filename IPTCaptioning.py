@@ -1,5 +1,10 @@
 # Python image captioning using BLIP model.
 # Requires PIL, transformers, torch, and deep_translator.
+# This file uses the BLIP image captioning model from Salesforce
+# https://huggingface.co/Salesforce/blip-image-captioning-base
+# Licensed under the BSD 3-Clause License
+# Copyright (c) 2022, Salesforce.com, Inc.
+
 import os
 import traceback
 import io
@@ -9,7 +14,9 @@ useImageThumbs = False
 enableProp = 'enableImageCaptioning'
 enabled = False
 configFile = 'IPTCaptioningConfig.txt'
-targetLanguageProp = 'targetlanguage' #'ipt.captioning.language'
+targetLanguageProp = 'targetlanguage'
+verbosemodeProp = 'verbosemode'
+captionPromptProp = 'captionPrompt'
 captioning_resultad_metadada = 'ImageCaptioning'
 
 processor = None
@@ -26,7 +33,7 @@ def loadModel():
     if model_obj is not None and processor_obj is not None:
         model = model_obj
         processor = processor_obj
-        print("Usando modelo BLIP já carregado")
+        logger.info("[IPTCaptioning] Usando modelo BLIP já carregado")
         return model, processor
 
     try:
@@ -34,7 +41,7 @@ def loadModel():
         iped_root = System.getProperty('iped.root')
         model_path = os.path.join(iped_root, 'models', 'salesforce')
 
-        print(f"Carregando modelo de {model_path}")
+        logger.info(f"[IPTCaptioning] Carregando modelo de {model_path}")
 
         from transformers import BlipProcessor, BlipForConditionalGeneration
 
@@ -43,21 +50,21 @@ def loadModel():
             import torch
             use_gpu = torch.cuda.is_available()
             if use_gpu:
-                print(f"GPU/CUDA disponível: {torch.cuda.get_device_name(0)}")
+                logger.info(f"[IPTCaptioning] GPU/CUDA disponível: {torch.cuda.get_device_name(0)}")
             else:
-                print("GPU/CUDA não disponível, usando CPU")
+                logger.info("[IPTCaptioning] GPU/CUDA não disponível, usando CPU")
         except:
             use_gpu = False
-            print("Não foi possível verificar disponibilidade de GPU/CUDA, usando CPU")
+            logger.warn("[IPTCaptioning] Não foi possível verificar disponibilidade de GPU/CUDA, usando CPU")
 
         # Verificar se a biblioteca Accelerate está disponível
         has_accelerate = False
         try:
             import accelerate
             has_accelerate = True
-            print("Biblioteca Accelerate disponível")
+            logger.info("[IPTCaptioning] Biblioteca Accelerate disponível")
         except ImportError:
-            print("Biblioteca Accelerate não disponível, usando configuração padrão")
+            logger.info("[IPTCaptioning] Biblioteca Accelerate não disponível, usando configuração padrão")
 
         # Carregar com configurações otimizadas
         processor = BlipProcessor.from_pretrained(
@@ -77,7 +84,7 @@ def loadModel():
         # Usa o CUDA se GPU disponível
         if use_gpu:
             model = model.to('cuda')
-            print("Modelo atualizado para uso da GPU")
+            logger.info("[IPTCaptioning] Modelo atualizado para uso da GPU")
 
         # Armazenar no caseData para reutilização
         caseData.putCaseObject('blip_model', model)
@@ -91,12 +98,12 @@ def loadModel():
         # Configurar idioma alvo
         target_language = get_target_language()
 
-        print("Modelo BLIP carregado com sucesso")
+        logger.info("[IPTCaptioning] Modelo BLIP carregado com sucesso")
         return model, processor
 
     except Exception as e:
-        error_msg = f"Erro ao carregar modelo: {str(e)}\n{traceback.format_exc()}"
-        print(error_msg)
+        error_msg = f"[IPTCaptioning] Erro ao carregar modelo: {str(e)}\n{traceback.format_exc()}"
+        logger.warn(error_msg)
         raise RuntimeError(error_msg)
 
 def get_target_language():
@@ -114,7 +121,7 @@ def get_target_language():
 
         # Verifica se o arquivo existe
         if not os.path.exists(prop_file_path):
-            print("Arquivo de propriedades não encontrado: " + prop_file_path)
+            logger.info("[IPTCaptioning] Arquivo de propriedades não encontrado: " + prop_file_path)
             return default_language
 
         # Lê o arquivo de propriedades
@@ -132,15 +139,15 @@ def get_target_language():
                     value = value.strip()
 
                     if key == targetLanguageProp:
-                        print("Idioma alvo encontrado no arquivo de propriedades: " + value)
+                        logger.info("[IPTCaptioning] Idioma alvo encontrado no arquivo de propriedades: " + value)
                         return value
 
         # Se a propriedade não for encontrada, retorna o valor padrão
-        print("Propriedade "+ targetLanguageProp +" não encontrada. Usando valor padrão: " + default_language)
+        logger.info("[IPTCaptioning] Propriedade "+ targetLanguageProp +" não encontrada. Usando valor padrão: " + default_language)
         return default_language
 
     except Exception as e:
-        print("Erro ao ler o arquivo de propriedades: " + str(e))
+        logger.warn("[IPTCaptioning] Erro ao ler o arquivo de propriedades: " + str(e))
         return 'pt'  # Valor padrão em caso de erro
 
 def isImage(item):
@@ -198,7 +205,7 @@ class IPTCaptioning:
     def init(self, configuration):
         global enabled
         enabled = configuration.getEnableTaskProperty(enableProp)
-        print(f"IPTCaptioning habilitado: {enabled}")
+        logger.info(f"[IPTCaptioning] habilitado: {enabled}")
         if not enabled:
             return
 
@@ -214,13 +221,14 @@ class IPTCaptioning:
         self.itemList.clear()
         self.imageList.clear()
         self.processing_times.clear()
-        print("Finalização concluída. Listas e tempos de processamento limpos.")
+        logger.info("[IPTCaptioning] Finish")
 
     def process(self, item):
         self.queued = False
 
         if not item.isQueueEnd() and not supported(item):
             return
+
 
         try:
             # Verificar se ja existe resultado no cache
@@ -245,7 +253,7 @@ class IPTCaptioning:
             img = resize_image_if_needed(img)
             processImage(img, item)
         except Exception as e:
-            print(f"Erro ao processar imagem: {str(e)}\n{traceback.format_exc()}")
+            logger.warn(f"[IPTCaptioning] Erro ao processar imagem: {str(e)}\n{traceback.format_exc()}")
             raise e
 
 def processImage(image, item):
@@ -256,9 +264,9 @@ def processImage(image, item):
         #se chegou ate aqui é porque não tinha o cache do item. Entao adicionamos a legenda ao cache
         if item.getHash() is not None:
             cache.put(item.getHash(), caption)
-        print(f"Legenda definida: {caption}")
+        logger.info(f"[IPTCaptioning] Legenda definida: {caption}")
     except Exception as e:
-        print(f"Erro ao processar lote de imagens: {str(e)}\n{traceback.format_exc()}")
+        logger.warn(f"[IPTCaptioning] Erro ao processar lote de imagens: {str(e)}\n{traceback.format_exc()}")
 
 def makePredictions(img):
     try:
@@ -274,12 +282,12 @@ def makePredictions(img):
             try:
                 caption = translator(source='auto', target=target_language).translate(caption_en)
             except Exception as e:
-                print(f"Erro na tradução, usando caption em inglês: {str(e)}")
+                logger.warn(f"[IPTCaptioning] Erro na tradução, usando caption em inglês: {str(e)}")
                 caption = caption_en
         else:
             caption = caption_en
 
         return caption
     except Exception as e:
-        print(f"Erro ao gerar caption: {str(e)}")
+        logger.warn(f"[IPTCaptioning] Erro ao gerar caption: {str(e)}")
         return "Erro ao gerar legenda"
