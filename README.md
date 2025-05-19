@@ -12,8 +12,7 @@ O script gera automaticamente descrições para imagens e, opcionalmente, traduz
 - Geração de legendas para imagens usando o modelo BLIP.
 - Suporte a **captioning condicional**, com prompt personalizado.
 - Tradução automática das legendas para diversos idiomas via `deep-translator`.
-- Integração nativa com o pipeline de tarefas do IPED.
-- Cache de legendas para não processar imagens repetidas.
+- Integração nativa com o processamento do IPED.
 - Compatível com CPU e GPU (via CUDA).
 
 ---
@@ -31,7 +30,7 @@ O script gera automaticamente descrições para imagens e, opcionalmente, traduz
 
 ## 🛠️ Configuração
 
-Siga os passos abaixo para integrar o `IPTCaptioning.py` ao seu ambiente IPED:
+Siga os passos abaixo para instalar o `IPTCaptioning.py` no seu IPED:
 
 ### 1. Editar o arquivo `IPEDConfig.txt`
 
@@ -45,7 +44,7 @@ enableImageCaptioning=true
 
 ### 2. Editar o arquivo `IPED_ROOT/conf/TaskInstaller.xml`
 
-Adicione a seguinte tag dentro da lista de tarefas:
+Adicione a seguinte tag dentro da lista de tasks:
 
 ```xml
 <task script="IPTCaptioning.py"></task>
@@ -101,8 +100,8 @@ Você pode personalizar as seguintes propriedades:
 
 ```ini
 targetlanguage=pt            # Idioma de tradução (ex: pt, en, es)
-showLog=true                 # Exibe logs detalhados
-captionPrompt=uma foto de   # Prompt condicional opcional
+showLog=true                 # Habilita ou desabilita a exibição de logs
+captionPrompt=uma foto de   # Prompt condicional (opcional - Deixe em branco se nao quiser usar)
 maxLength=70                # Tamanho máximo da legenda
 ```
 
@@ -121,7 +120,7 @@ IPED_ROOT/scripts/tasks/
 
 ## 🚀 Execução
 
-Após as configurações, basta rodar o IPED normalmente. As imagens processadas receberão uma legenda automática como atributo extra (`ImageCaptioning`), que pode ser visualizado no IPED GUI.
+Após as configurações, basta rodar o IPED normalmente. As imagens processadas receberão uma legenda automática como atributo extra (`ImageCaptioning`), que pode ser visualizado no módulo de análise do IPED (IPED-SearchApp.exe).
 
 ---
 
@@ -131,3 +130,6 @@ Este projeto utiliza o modelo [Salesforce/blip-image-captioning-base](https://hu
 
 ---
 
+### 🔧 Bibliotecas utilizadas
+
+- [deep-translator](https://github.com/nidhaloff/deep-translator) — biblioteca para tradução automática entre idiomas. Licença MIT.
